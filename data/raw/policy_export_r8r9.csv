@@ -1,0 +1,5 @@
+chunk_id,doc_id,chunk_text,effective_date,exported_at
+1,it_helpdesk_faq,OK.,2026-02-01,2026-04-10T08:00:00
+2,sla_p1_2026,Ticket P1 có SLA phản hồi ban đầu 15 phút và resolution trong 4 giờ.,2026-02-01,
+3,hr_leave_policy,Nhân viên dưới 3 năm kinh nghiệm được 12 ngày phép năm theo chính sách 2026.,2026-02-01,2026-04-10T08:00:00
+4,policy_refund_v4,Yêu cầu được gửi trong vòng 7 ngày làm việc kể từ thời điểm xác nhận đơn hàng.,2026-02-01,2026-04-10T08:00:00

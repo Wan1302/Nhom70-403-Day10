@@ -1,0 +1,15 @@
+run_id=r8r9
+raw_records=4
+cleaned_records=2
+quarantine_records=2
+cleaned_csv=artifacts\cleaned\cleaned_r8r9.csv
+quarantine_csv=artifacts\quarantine\quarantine_r8r9.csv
+expectation[min_one_row] OK (halt) :: cleaned_rows=2
+expectation[no_empty_doc_id] OK (halt) :: empty_doc_id_count=0
+expectation[refund_no_stale_14d_window] OK (halt) :: violations=0
+expectation[chunk_min_length_8] OK (warn) :: short_chunks=0
+expectation[effective_date_iso_yyyy_mm_dd] OK (halt) :: non_iso_rows=0
+expectation[hr_leave_no_stale_10d_annual] OK (halt) :: violations=0
+expectation[no_internal_note_in_cleaned] OK (halt) :: violations=0
+expectation[all_required_docs_present] FAIL (warn) :: missing_docs=['it_helpdesk_faq', 'sla_p1_2026']
+expectation[no_placeholder_in_chunk] OK (warn) :: placeholder_chunks=0
