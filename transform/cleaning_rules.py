@@ -23,6 +23,12 @@ ALLOWED_DOC_IDS = frozenset(
     }
 )
 
+# R7: pattern ghi chú nội bộ / migration note không được đưa lên production
+_INTERNAL_NOTE_MARKERS = ("(ghi chú:", "lỗi migration", "bản sync cũ")
+
+# R9: chunk quá ngắn sau strip — không đủ ngữ nghĩa để embed
+_CHUNK_MIN_LENGTH = 20
+
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _DMY_SLASH = re.compile(r"^(\d{2})/(\d{2})/(\d{4})$")
 
@@ -93,6 +99,12 @@ def clean_rows(
             quarantine.append({**raw, "reason": "unknown_doc_id"})
             continue
 
+        # R8: exported_at bắt buộc — không có timestamp → không xác định được nguồn/thời điểm export.
+        # metric_impact: quarantine_records tăng khi inject row thiếu exported_at.
+        if not exported_at.strip():
+            quarantine.append({**raw, "reason": "missing_exported_at"})
+            continue
+
         eff_norm, eff_err = _normalize_effective_date(eff_raw)
         if eff_err == "empty_effective_date":
             quarantine.append({**raw, "reason": "missing_effective_date"})
@@ -113,6 +125,19 @@ def clean_rows(
 
         if not text:
             quarantine.append({**raw, "reason": "missing_chunk_text"})
+            continue
+
+        # R9: chunk_text quá ngắn sau strip — không đủ ngữ nghĩa để embed có chất lượng.
+        # metric_impact: quarantine_records tăng khi inject chunk ngắn (vd "OK.", "N/A").
+        if len(text.strip()) < _CHUNK_MIN_LENGTH:
+            quarantine.append({**raw, "reason": "chunk_text_too_short", "chunk_length": len(text.strip())})
+            continue
+
+        # R7: chunk_text chứa ghi chú nội bộ / migration note → không phát hành lên vector store.
+        # metric_impact: trên CSV mẫu, row 3 (policy-v3 migration note) bị quarantine;
+        # quarantine_records tăng từ 4 → 5, cleaned_records giảm từ 6 → 5.
+        if any(marker in text.lower() for marker in _INTERNAL_NOTE_MARKERS):
+            quarantine.append({**raw, "reason": "internal_migration_note_in_text"})
             continue
 
         key = _norm_text(text)
