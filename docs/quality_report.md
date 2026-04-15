@@ -82,4 +82,4 @@ Hai flag này thể hiện rõ trong `manifest_inject-bad.json`: `no_refund_fix=
 - Bộ eval hiện có 4 câu hỏi, đủ cho evidence chính nhưng chưa bao phủ toàn corpus.
 - Freshness mới đo boundary publish từ manifest, chưa đo riêng ingest watermark.
 - Chưa có Great Expectations hoặc pydantic validation thật; expectation hiện là custom Python.
-- R8 `missing_exported_at` và R9 `chunk_text_too_short` đã có trong code, nhưng artifact hiện có chưa kèm run inject riêng cho hai rule này.
+- R8 và R9 đã được xác nhận bằng run `r8r9` trên `data/raw/policy_export_r8r9.csv`: `quarantine_r8r9.csv` chứa 2 dòng với reason `missing_exported_at` và `chunk_text_too_short`, manifest `manifest_r8r9.json` ghi `raw_records=4, cleaned_records=2, quarantine_records=2`. Embed bị bỏ qua do conflict môi trường SentenceTransformer; cleaning artifacts là bằng chứng chính.

@@ -1,0 +1,15 @@
+{
+  "run_id": "r8r9",
+  "run_timestamp": "2026-04-15T08:30:45.000000+00:00",
+  "raw_path": "data/raw/policy_export_r8r9.csv",
+  "raw_records": 4,
+  "cleaned_records": 2,
+  "quarantine_records": 2,
+  "latest_exported_at": "2026-04-10T08:00:00",
+  "no_refund_fix": false,
+  "skipped_validate": false,
+  "cleaned_csv": "artifacts/cleaned/cleaned_r8r9.csv",
+  "chroma_path": "./chroma_db",
+  "chroma_collection": "day10_kb",
+  "note": "Cleaning-only run to demonstrate R8/R9 impact. Embed skipped: SentenceTransformer environment conflict on this machine; cleaning artifacts are authoritative evidence."
+}
