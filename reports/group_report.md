@@ -1,90 +1,70 @@
 # Báo Cáo Nhóm — Lab Day 10: Data Pipeline & Data Observability
 
-**Tên nhóm:** ___________  
-**Thành viên:**
+**Tên nhóm:** Nhóm 70-403
+**Ngày nộp:** 2026-04-15
+**Repo:** `Nhom70-403-Day10`
+
 | Tên | Vai trò (Day 10) | Email |
 |-----|------------------|-------|
-| ___ | Ingestion / Raw Owner | ___ |
-| ___ | Cleaning & Quality Owner | ___ |
-| ___ | Embed & Idempotency Owner | ___ |
-| ___ | Monitoring / Docs Owner | ___ |
+| Hồ Đắc Toàn | Monitoring / Docs Owner; tổng hợp source map, runbook, report, freshness evidence | ___ |
+| Hồ Trần Đình Nguyên | Cleaning & Quality Owner | ___ |
+| Hồ Trọng Duy Quang | Embed & Idempotency Owner | ___ |
 
-**Ngày nộp:** ___________  
-**Repo:** ___________  
-**Độ dài khuyến nghị:** 600–1000 từ
+## 1. Pipeline tổng quan
 
----
+Nguồn raw chính của nhóm là `data/raw/policy_export_dirty.csv`, một file export mô phỏng từ hệ CS/IT với 10 dòng. File này cố tình có nhiều lỗi hay gặp trong thực tế: duplicate, thiếu ngày, `doc_id` lạ, ngày theo format `DD/MM/YYYY`, bản HR 2025 còn `10 ngày phép năm`, và một chunk refund cũ ghi `14 ngày làm việc`. Pipeline xử lý theo luồng: ingest CSV → clean/quarantine → validate expectations → embed vào Chroma collection `day10_kb` → ghi manifest và kiểm freshness. `run_id` được lưu trong manifest và tên artifact; ví dụ `manifest_sprint2.json` ghi `raw_records=10`, `cleaned_records=5`, `quarantine_records=5`.
 
-> **Nộp tại:** `reports/group_report.md`  
-> **Deadline commit:** xem `SCORING.md` (code/trace sớm; report có thể muộn hơn nếu được phép).  
-> Phải có **run_id**, **đường dẫn artifact**, và **bằng chứng before/after** (CSV eval hoặc screenshot).
+**Lệnh chạy chuẩn:**
 
----
+```bash
+python etl_pipeline.py run --run-id sprint2
+```
 
-## 1. Pipeline tổng quan (150–200 từ)
+## 2. Cleaning & expectation
 
-> Nguồn raw là gì (CSV mẫu / export thật)? Chuỗi lệnh chạy end-to-end? `run_id` lấy ở đâu trong log?
+### 2a. Bảng metric_impact
 
-**Tóm tắt luồng:**
+| Rule / Expectation mới | Trước | Sau / khi inject | Chứng cứ |
+|------------------------|-------|------------------|----------|
+| R7 `internal_migration_note_in_text` | `sprint1`: `cleaned_records=6`, `quarantine_records=4` | `sprint2`: `cleaned_records=5`, `quarantine_records=5` | `artifacts/manifests/manifest_sprint1.json`, `artifacts/manifests/manifest_sprint2.json`, `artifacts/quarantine/quarantine_sprint2.csv` |
+| R8 `missing_exported_at` | Dirty/inject hiện có không có row thiếu `exported_at` | Code quarantine với reason `missing_exported_at` khi upstream thiếu timestamp | `transform/cleaning_rules.py` |
+| R9 `chunk_text_too_short` | Dirty/inject hiện có không có chunk ngắn dưới 20 ký tự | Code quarantine với reason `chunk_text_too_short` khi inject `OK.` hoặc `N/A` | `transform/cleaning_rules.py` |
+| E7 `no_internal_note_in_cleaned` | Nếu R7 không có, chunk policy-v3 migration note có thể lọt vào cleaned | `sprint2`: PASS, `violations=0` | `quality/expectations.py`, `artifacts/cleaned/cleaned_sprint2.csv` |
+| E8 `all_required_docs_present` | Nếu clean quá tay làm mất 1 doc bắt buộc sẽ WARN | `sprint2`: PASS, `missing_docs=[]` | `quality/expectations.py` |
+| E9 `no_placeholder_in_chunk` | Nếu inject `TODO`/`PLACEHOLDER` sẽ WARN | `sprint2`: PASS, `placeholder_chunks=0` | `quality/expectations.py` |
 
-_________________
+Các rule nền quan trọng gồm allowlist `doc_id`, chuẩn hóa `effective_date`, quarantine HR cũ trước `2026-01-01`, loại text rỗng hoặc thiếu ngày, dedupe nội dung, và sửa refund `14 ngày làm việc` thành `7 ngày làm việc`. Expectation hiện có 9 check, trong đó E7-E9 là phần mở rộng để bắt internal note, thiếu doc bắt buộc và placeholder. Run `inject-bad` sẽ fail halt `refund_no_stale_14d_window` nếu không cố tình dùng `--skip-validate`.
 
-**Lệnh chạy một dòng (copy từ README thực tế của nhóm):**
+## 3. Before / after ảnh hưởng retrieval
 
-_________________
+Kịch bản inject dùng `data/raw/policy_export_inject.csv` và lệnh:
 
----
+```bash
+python etl_pipeline.py run --run-id inject-bad --no-refund-fix --skip-validate
+```
 
-## 2. Cleaning & expectation (150–200 từ)
+Manifest `inject-bad` xác nhận `raw_records=5`, `cleaned_records=5`, `quarantine_records=0`, `no_refund_fix=true`, `skipped_validate=true`. Vì run này bỏ rule fix refund và bỏ qua validate halt, chunk `14 ngày làm việc` được publish vào Chroma. Đây là tình huống xấu có chủ đích để chứng minh eval bắt được stale context.
 
-> Baseline đã có nhiều rule (allowlist, ngày ISO, HR stale, refund, dedupe…). Nhóm thêm **≥3 rule mới** + **≥2 expectation mới**. Khai báo expectation nào **halt**.
+| Câu hỏi | File eval | contains_expected | hits_forbidden | top1_doc_expected |
+|---------|-----------|-------------------|----------------|-------------------|
+| `q_refund_window` | `after_inject_bad.csv` | yes | yes | — |
+| `q_refund_window` | `after_fix_eval.csv` | yes | no | — |
+| `q_leave_version` | `after_inject_bad.csv` | yes | no | yes |
+| `q_leave_version` | `after_fix_eval.csv` | yes | no | yes |
 
-### 2a. Bảng metric_impact (bắt buộc — chống trivial)
+Kết luận: inject làm retrieval xấu đi ở câu refund vì `hits_forbidden=yes`. Run phục hồi `after-restore` đưa refund về `7 ngày làm việc`, và eval sau fix sạch lại với `hits_forbidden=no`. Câu HR vẫn ổn qua hai scenario vì bản HR 2025 đã bị quarantine từ dirty export.
 
-| Rule / Expectation mới (tên ngắn) | Trước (số liệu) | Sau / khi inject (số liệu) | Chứng cứ (log / CSV / commit) |
-|-----------------------------------|------------------|-----------------------------|-------------------------------|
-| … | … | … | … |
+## 4. Freshness & monitoring
 
-**Rule chính (baseline + mở rộng):**
+Nhóm chọn SLA freshness là 24 giờ, cấu hình trong `.env.example` bằng `FRESHNESS_SLA_HOURS=24`. Lệnh `python etl_pipeline.py freshness --manifest artifacts/manifests/manifest_sprint2.json` trả `FAIL` vì `latest_exported_at=2026-04-10T08:00:00`, tức dữ liệu đã cũ khoảng 118 giờ tại ngày nộp. Đây là kết quả đúng với snapshot lab: dữ liệu có thể sạch về nội dung nhưng vẫn stale theo thời gian, nên nếu lên production thì phải re-ingest hoặc gửi cảnh báo tới `nhom70-data-alerts`.
 
-- …
+## 5. Liên hệ Day 09
 
-**Ví dụ 1 lần expectation fail (nếu có) và cách xử lý:**
-
-_________________
-
----
-
-## 3. Before / after ảnh hưởng retrieval hoặc agent (200–250 từ)
-
-> Bắt buộc: inject corruption (Sprint 3) — mô tả + dẫn `artifacts/eval/…` hoặc log.
-
-**Kịch bản inject:**
-
-_________________
-
-**Kết quả định lượng (từ CSV / bảng):**
-
-_________________
-
----
-
-## 4. Freshness & monitoring (100–150 từ)
-
-> SLA bạn chọn, ý nghĩa PASS/WARN/FAIL trên manifest mẫu.
-
-_________________
-
----
-
-## 5. Liên hệ Day 09 (50–100 từ)
-
-> Dữ liệu sau embed có phục vụ lại multi-agent Day 09 không? Nếu có, mô tả tích hợp; nếu không, giải thích vì sao tách collection.
-
-_________________
-
----
+Pipeline Day 10 dùng collection riêng `day10_kb`, tách khỏi collection Day 09 để dữ liệu raw bẩn không ảnh hưởng trực tiếp tới multi-agent. Khi pipeline chuẩn exit 0, expectation pass và eval sạch, Day 09 có thể đổi env `CHROMA_COLLECTION=day10_kb` để dùng corpus đã được clean.
 
 ## 6. Rủi ro còn lại & việc chưa làm
 
-- …
+- Artifact hiện không có `artifacts/logs/run_<id>.log`; bằng chứng chính đang dựa vào manifest, cleaned/quarantine CSV và eval CSV.
+- R8/R9 có code nhưng chưa có artifact inject riêng để chứng minh delta số liệu.
+- Freshness chỉ đo `latest_exported_at` ở boundary publish, chưa đo ingest watermark riêng.
+- Chưa có alert tự động hoặc Great Expectations/pydantic validation thật.
