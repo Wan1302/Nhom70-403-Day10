@@ -8,7 +8,7 @@
 |-----|------------------|-------|
 | Hồ Đắc Toàn | Monitoring / Docs Owner; tổng hợp source map, runbook, report, freshness evidence | ___ |
 | Hồ Trần Đình Nguyên | Cleaning & Quality Owner | ___ |
-| Hồ Trọng Duy Quang | Embed & Idempotency Owner | ___ |
+| Hồ Trọng Duy Quang | Quality & Embed Owner — expectations, pydantic validation, inject eval, freshness evidence | ___ |
 
 ## 1. Pipeline tổng quan
 

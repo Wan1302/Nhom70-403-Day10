@@ -65,7 +65,6 @@ Collection `day10_kb` được tách khỏi Day 09 để nhóm kiểm chứng pi
 
 ## 5. Rủi ro đã biết
 
-- Snapshot hiện có freshness FAIL vì export ngày `2026-04-10`.
-- Artifact log chưa được commit; bằng chứng hiện dựa vào manifest/CSV.
-- Chưa có alert tự động khi freshness FAIL.
-- Chưa có validation framework như Great Expectations hoặc pydantic.
+- Snapshot hiện có freshness FAIL vì export ngày `2026-04-10`; ingest boundary FAIL, publish boundary PASS (run `bonus-final`).
+- Chưa có alert tự động khi freshness FAIL; `data_contract.yaml` khai báo `alert_channel` nhưng chưa có consumer.
+- Pydantic schema validation đã triển khai tại `quality/schema_validation.py` và được gọi trong `etl_pipeline.py` sau bước clean (log: `schema_validation=OK :: framework=pydantic rows=5 errors=0`). Chưa tích hợp Great Expectations.
