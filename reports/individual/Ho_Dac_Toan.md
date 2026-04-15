@@ -23,3 +23,8 @@ Trước khi sửa là `run_id=inject-bad`, file `artifacts/eval/after_inject_ba
 ## 5. Cải tiến tiếp theo
 
 Nếu có thêm 2 giờ, tôi sẽ tạo riêng một run inject cho R8/R9 để có artifact chứng minh `missing_exported_at` và `chunk_text_too_short`. Sau đó tôi sẽ nối `freshness_check` vào scheduler để gửi alert thật tới `nhom70-data-alerts`, thay vì chỉ ghi cảnh báo trong tài liệu.
+
+---
+
+Lab 1: https://github.com/dactoan10052004/2A202600057_Ho_Dac_Toan_Day10_Lab_1.git
+Lab 2: https://github.com/GDGoC-FPTU/data-pipeline-observability-dactoan10052004.git
