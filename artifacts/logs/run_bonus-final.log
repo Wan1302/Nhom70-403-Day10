@@ -1,0 +1,23 @@
+run_id=bonus-final
+raw_records=10
+cleaned_records=5
+quarantine_records=5
+cleaned_csv=artifacts\cleaned\cleaned_bonus-final.csv
+quarantine_csv=artifacts\quarantine\quarantine_bonus-final.csv
+schema_validation=OK :: framework=pydantic rows=5 errors=0
+expectation[min_one_row] OK (halt) :: cleaned_rows=5
+expectation[no_empty_doc_id] OK (halt) :: empty_doc_id_count=0
+expectation[refund_no_stale_14d_window] OK (halt) :: violations=0
+expectation[chunk_min_length_8] OK (warn) :: short_chunks=0
+expectation[effective_date_iso_yyyy_mm_dd] OK (halt) :: non_iso_rows=0
+expectation[hr_leave_no_stale_10d_annual] OK (halt) :: violations=0
+expectation[no_internal_note_in_cleaned] OK (halt) :: violations=0
+expectation[all_required_docs_present] OK (warn) :: missing_docs=[]
+expectation[no_placeholder_in_chunk] OK (warn) :: placeholder_chunks=0
+embed_prune_removed=4
+embed_upsert count=5 collection=day10_kb
+manifest_written=artifacts\manifests\manifest_bonus-final.json
+freshness_check=FAIL {"latest_exported_at": "2026-04-10T08:00:00", "age_hours": 121.057, "sla_hours": 24.0, "reason": "freshness_sla_exceeded"}
+ingest_freshness_check=FAIL {"boundary": "ingest", "timestamp": "2026-04-10T08:00:00", "age_hours": 121.057, "sla_hours": 24.0, "reason": "freshness_sla_exceeded"}
+publish_freshness_check=PASS {"boundary": "publish", "timestamp": "2026-04-15T09:03:24.930676+00:00", "age_hours": 0.0, "sla_hours": 24.0}
+PIPELINE_OK

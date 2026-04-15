@@ -58,13 +58,19 @@ Kết luận: inject làm retrieval xấu đi ở câu refund vì `hits_forbidde
 
 Nhóm chọn SLA freshness là 24 giờ, cấu hình trong `.env.example` bằng `FRESHNESS_SLA_HOURS=24`. Lệnh `python etl_pipeline.py freshness --manifest artifacts/manifests/manifest_sprint2.json` trả `FAIL` vì `latest_exported_at=2026-04-10T08:00:00`, tức dữ liệu đã cũ khoảng 118 giờ tại ngày nộp. Đây là kết quả đúng với snapshot lab: dữ liệu có thể sạch về nội dung nhưng vẫn stale theo thời gian, nên nếu lên production thì phải re-ingest hoặc gửi cảnh báo tới `nhom70-data-alerts`.
 
+Nhóm bổ sung đo 2 boundary trong run `bonus-final`: `ingest_freshness_check=FAIL` trên watermark nguồn `2026-04-10T08:00:00`, và `publish_freshness_check=PASS` trên `publish_timestamp` của manifest mới. Log nằm ở `artifacts/logs/run_bonus-final.log`, manifest nằm ở `artifacts/manifests/manifest_bonus-final.json`.
+
+## 4b. Bonus validation
+
+Nhóm bổ sung pydantic validation thật trong `quality/schema_validation.py` và gọi từ `etl_pipeline.py` sau bước clean, trước expectation/embed. Run `bonus-final` có log `schema_validation=OK :: framework=pydantic rows=5 errors=0`, nghĩa là 5 dòng cleaned pass schema `chunk_id`, `doc_id`, `chunk_text`, `effective_date`, `exported_at` và allowlist `doc_id`. Custom expectations cũ vẫn được giữ nguyên để kiểm rule nghiệp vụ.
+
 ## 5. Liên hệ Day 09
 
 Pipeline Day 10 dùng collection riêng `day10_kb`, tách khỏi collection Day 09 để dữ liệu raw bẩn không ảnh hưởng trực tiếp tới multi-agent. Khi pipeline chuẩn exit 0, expectation pass và eval sạch, Day 09 có thể đổi env `CHROMA_COLLECTION=day10_kb` để dùng corpus đã được clean.
 
 ## 6. Rủi ro còn lại & việc chưa làm
 
-- Artifact hiện không có `artifacts/logs/run_<id>.log`; bằng chứng chính đang dựa vào manifest, cleaned/quarantine CSV và eval CSV.
+- Artifact log đã có cho các run chính; khi nộp cần bảo đảm `artifacts/logs/run_bonus-final.log` và manifest tương ứng được commit.
 - R8/R9 có code nhưng chưa có artifact inject riêng để chứng minh delta số liệu.
-- Freshness chỉ đo `latest_exported_at` ở boundary publish, chưa đo ingest watermark riêng.
-- Chưa có alert tự động hoặc Great Expectations/pydantic validation thật.
+- Freshness đã có log 2 boundary ở `bonus-final`, nhưng chưa có alert tự động.
+- Chưa tích hợp Great Expectations; validation bonus hiện dùng pydantic model thật.
