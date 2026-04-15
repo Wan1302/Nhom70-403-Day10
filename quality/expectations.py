@@ -112,5 +112,57 @@ def run_expectations(cleaned_rows: List[Dict[str, Any]]) -> Tuple[List[Expectati
         )
     )
 
+    # E7: Defense-in-depth — xác nhận không có ghi chú nội bộ/migration nào lọt qua cleaning.
+    # metric_impact: FAIL nếu R7 bị vô hiệu hoá hoặc bỏ qua (vd chạy pipeline không có rule R7);
+    # hiện tại PASS sau sprint2 vì R7 đã quarantine row 3.
+    _INTERNAL_MARKERS = ("(ghi chú:", "lỗi migration", "bản sync cũ")
+    bad_internal = [
+        r for r in cleaned_rows
+        if any(m in (r.get("chunk_text") or "").lower() for m in _INTERNAL_MARKERS)
+    ]
+    ok7 = len(bad_internal) == 0
+    results.append(
+        ExpectationResult(
+            "no_internal_note_in_cleaned",
+            ok7,
+            "halt",
+            f"violations={len(bad_internal)}",
+        )
+    )
+
+    # E8: Completeness — tất cả 4 doc_id bắt buộc phải còn ít nhất 1 chunk sau clean.
+    # metric_impact: WARN nếu inject xoá hết chunk của 1 doc (vd bỏ toàn bộ sla_p1_2026);
+    # hiện tại PASS sau sprint2 vì đủ 4 doc_id.
+    _REQUIRED_DOCS = frozenset({"policy_refund_v4", "sla_p1_2026", "it_helpdesk_faq", "hr_leave_policy"})
+    present_docs = {r.get("doc_id") for r in cleaned_rows}
+    missing_docs = sorted(_REQUIRED_DOCS - present_docs)
+    ok8 = len(missing_docs) == 0
+    results.append(
+        ExpectationResult(
+            "all_required_docs_present",
+            ok8,
+            "warn",
+            f"missing_docs={missing_docs}",
+        )
+    )
+
+    # E9: Không có chunk nào chứa placeholder chưa điền — phòng inject dữ liệu rỗng.
+    # metric_impact: WARN nếu inject row với text "TODO", "N/A", "PLACEHOLDER", "[TBD]";
+    # hiện tại PASS vì không có chunk nào chứa các marker này.
+    _PLACEHOLDER_MARKERS = ("todo", "placeholder", "n/a", "[tbd]")
+    bad_placeholder = [
+        r for r in cleaned_rows
+        if any(m in (r.get("chunk_text") or "").lower() for m in _PLACEHOLDER_MARKERS)
+    ]
+    ok9 = len(bad_placeholder) == 0
+    results.append(
+        ExpectationResult(
+            "no_placeholder_in_chunk",
+            ok9,
+            "warn",
+            f"placeholder_chunks={len(bad_placeholder)}",
+        )
+    )
+
     halt = any(not r.passed and r.severity == "halt" for r in results)
     return results, halt
