@@ -25,8 +25,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from monitoring.freshness_check import check_manifest_freshness
+from monitoring.freshness_check import check_manifest_boundary_freshness, check_manifest_freshness
 from quality.expectations import run_expectations
+from quality.schema_validation import validate_cleaned_rows
 from transform.cleaning_rules import clean_rows, load_raw_csv, write_cleaned_csv, write_quarantine_csv
 
 load_dotenv()
@@ -80,6 +81,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     log(f"cleaned_csv={cleaned_path.relative_to(ROOT)}")
     log(f"quarantine_csv={quar_path.relative_to(ROOT)}")
 
+    _, schema_summary = validate_cleaned_rows(cleaned)
+    if schema_summary.passed:
+        log(f"schema_validation=OK :: {schema_summary.detail}")
+    else:
+        log(f"schema_validation=FAIL :: {schema_summary.detail}")
+        for err in schema_summary.errors[:5]:
+            log(f"schema_validation_error={json.dumps(err, ensure_ascii=False)}")
+        log("PIPELINE_HALT: pydantic cleaned schema validation failed.")
+        return 2
+
     results, halt = run_expectations(cleaned)
     for r in results:
         sym = "OK" if r.passed else "FAIL"
@@ -103,13 +114,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     if cleaned:
         latest_exported = max((r.get("exported_at") or "" for r in cleaned), default="")
 
+    publish_timestamp = datetime.now(timezone.utc).isoformat()
     manifest = {
         "run_id": run_id,
-        "run_timestamp": datetime.now(timezone.utc).isoformat(),
+        "run_timestamp": publish_timestamp,
+        "publish_timestamp": publish_timestamp,
         "raw_path": str(raw_path.relative_to(ROOT)),
         "raw_records": raw_count,
         "cleaned_records": len(cleaned),
         "quarantine_records": len(quarantine),
+        "ingest_watermark": latest_exported,
         "latest_exported_at": latest_exported,
         "no_refund_fix": bool(args.no_refund_fix),
         "skipped_validate": bool(args.skip_validate and halt),
@@ -123,6 +137,10 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     status, fdetail = check_manifest_freshness(man_path, sla_hours=float(os.environ.get("FRESHNESS_SLA_HOURS", "24")))
     log(f"freshness_check={status} {json.dumps(fdetail, ensure_ascii=False)}")
+    boundary_freshness = check_manifest_boundary_freshness(man_path, sla_hours=float(os.environ.get("FRESHNESS_SLA_HOURS", "24")))
+    for boundary in ("ingest", "publish"):
+        bstatus, bdetail = boundary_freshness[boundary]
+        log(f"{boundary}_freshness_check={bstatus} {json.dumps(bdetail, ensure_ascii=False)}")
 
     log("PIPELINE_OK")
     return 0
@@ -185,7 +203,11 @@ def cmd_freshness(args: argparse.Namespace) -> int:
     sla = float(os.environ.get("FRESHNESS_SLA_HOURS", "24"))
     status, detail = check_manifest_freshness(p, sla_hours=sla)
     print(status, json.dumps(detail, ensure_ascii=False))
-    return 0 if status != "FAIL" else 1
+    boundary_freshness = check_manifest_boundary_freshness(p, sla_hours=sla)
+    for boundary in ("ingest", "publish"):
+        bstatus, bdetail = boundary_freshness[boundary]
+        print(f"{boundary} {bstatus}", json.dumps(bdetail, ensure_ascii=False))
+    return 0 if all(result[0] != "FAIL" for result in boundary_freshness.values()) else 1
 
 
 def main() -> int:
