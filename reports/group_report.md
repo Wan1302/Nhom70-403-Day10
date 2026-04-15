@@ -71,7 +71,20 @@ Pipeline Day 10 dùng collection riêng `day10_kb`, tách khỏi collection Day 
 
 ## 6. Peer Review — Phần E (slide Day 10)
 
-- Artifact log đã có cho các run chính; khi nộp cần bảo đảm `artifacts/logs/run_bonus-final.log` và manifest tương ứng được commit.
-- R8/R9 có code nhưng chưa có artifact inject riêng để chứng minh delta số liệu.
-- Freshness đã có log 2 boundary ở `bonus-final`, nhưng chưa có alert tự động.
-- Chưa tích hợp Great Expectations; validation bonus hiện dùng pydantic model thật.
+**Câu 1 — Schema resilience: Nếu upstream đổi tên cột `exported_at` thành `export_ts`, pipeline bị hỏng ở đâu đầu tiên? Đội on-call phát hiện bằng cơ chế nào?**
+
+Pipeline sẽ bị hỏng ở bước R8 trong `clean_rows()`: vì `raw.get("exported_at", "")` luôn trả về chuỗi rỗng khi cột không tồn tại, toàn bộ row sẽ bị quarantine với reason `missing_exported_at`. Kết quả: `cleaned_records=0`, `quarantine_records=N`. Đội on-call phát hiện qua hai tín hiệu: (1) expectation `all_required_docs_present` báo `WARN :: missing_docs=[...]` vì không còn chunk nào sau clean; (2) freshness check sẽ `WARN :: no_timestamp_in_manifest` vì `latest_exported_at` rỗng. Hành động: mở `quarantine_<run_id>.csv`, thấy tất cả rows cùng reason `missing_exported_at` → xác định rename cột → cập nhật `cleaning_rules.py` và `data_contract.yaml`.
+
+**Câu 2 — Silent data loss: Điểm nào trong pipeline dễ xảy ra mất dữ liệu không báo lỗi? Expectation nào bảo vệ điểm đó?**
+
+Điểm nguy hiểm nhất là bước dedupe (`seen_text`): nếu hai chunks khác version nhưng nội dung text normalize giống nhau (ví dụ chỉ khác whitespace hoặc dấu câu), bản thứ hai sẽ bị drop thầm lặng với reason `duplicate_chunk_text` — không có alert, pipeline vẫn exit 0. Một trường hợp khác là embed prune: nếu `chunk_id` thay đổi do reorder CSV, vector cũ bị prune và vector mới chưa kịp index sẽ tạo ra khoảng trắng nhất thời. Expectation E8 `all_required_docs_present` (severity warn) bảo vệ ở mức doc-level — báo khi cả một doc biến mất khỏi cleaned. Tuy nhiên, không có expectation kiểm tra số lượng chunk tối thiểu mỗi `doc_id`; đây là gap cần bổ sung nếu tiếp tục phát triển.
+
+**Câu 3 — Production readiness: Nếu pipeline chạy tự động mỗi 6 giờ trên production, thay đổi kỹ thuật nào là cần thiết nhất?**
+
+Ba thay đổi ưu tiên theo thứ tự: (1) **Alert tự động** — kết nối freshness check và expectation HALT vào scheduler, gửi cảnh báo tới `nhom70-data-alerts` thay vì chỉ ghi log; hiện tại `data_contract.yaml` đã khai báo `alert_channel` nhưng chưa có consumer. (2) **Rule versioning từ contract** — đưa `hr_leave_min_effective_date` và các cutoff date ra `contracts/data_contract.yaml` hoặc biến môi trường thay vì hard-code `"2026-01-01"` trong code; giúp on-call thay đổi policy mà không cần deploy code. (3) **Freshness đo 2 boundary** — nhóm đã implement trong run `bonus-final`: `ingest_freshness_check` đo watermark nguồn, `publish_freshness_check` đo thời điểm embed xong; giúp phân biệt "data source lỗi" vs "pipeline chạy chậm".
+
+## 7. Rủi ro còn lại & việc chưa làm
+
+- Artifact log đã commit cho các run chính (`sprint1`, `sprint2-exp`, `inject-bad`, `after-restore`, `bonus-final`, `r8r9`); manifest JSON có đủ `run_id`, `raw_records`, `cleaned_records`, `quarantine_records`.
+- Freshness đã đo 2 boundary trong `bonus-final`; chưa có alert tự động kết nối `nhom70-data-alerts`.
+- Bộ eval hiện có 4 câu hỏi golden, đủ cho evidence chính nhưng chưa bao phủ toàn corpus.
